@@ -2,7 +2,7 @@
   "name": "CD/CI Tutorial Sample App",
   "description": "A sample Python REST API application based on Flask, with database migrations and unit tests.",
   "image": "heroku/python",
-  "repository": "https://github.com/rockedscience/ci-cd-tutorial-sample-app",
+  "repository": "https://github.com/gryfo/peex-ci-cd-sample-app",
   "keywords": ["python" ],
   "addons": [ "heroku-postgresql" ],
   "env": {},
