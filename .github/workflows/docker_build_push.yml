@@ -1,80 +1,76 @@
-# Taken from: https://docs.github.com/en/free-pro-team@latest/actions/guides/building-and-testing-python
-# and: https://docs.github.com/en/free-pro-team@latest/actions/guides/publishing-docker-images
-# and adapted. More info on workflow syntax: https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions
-name: Lint the code, run tests, build and push Docker image
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+# GitHub recommends pinning actions to a commit SHA.
+# To get a newer version, you will need to update the SHA.
+# You can also reference a tag or branch, but the action may change without warning.
+
+name: Deploy to Amazon ECS
 
 on:
   push:
-    # Match all branches *without* a / in the name.
-    # This will exclude "sub" branches, such as "feature branches",
-    # named something like: "feature/my-feature". Those branches will
-    # likely contain "work in progress" code, so we will run the tests
-    # on the local machine and avoid using up GitHub Actions credits
-    # (if applicable, such as in `private` repositories).
-    # Filter syntax info: https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-syntax-for-github-actions#filter-pattern-cheat-sheet
     branches:
-      - '*'
-  pull_request:
-    # Since pull requests come from "third parties", we will automatically
-    # test everything coming from the outside world, for good measure.
-    # The `branches` tag could also be omitted, yielding the same effect here.
-    branches:
-      - '**'
-  release:
-    types: [published, edited]
+      - main
+      - dev
+
+env:
+  AWS_REGION: eu-west-1                   # set this to your preferred AWS region, e.g. us-west-1
+  ECR_REPOSITORY: peex-ecr-dev           # set this to your Amazon ECR repository name
+  ECS_SERVICE: peex-sample-dev                 # set this to your Amazon ECS service name
+  ECS_CLUSTER: ecs-peex-infra-dev                 # set this to your Amazon ECS cluster name
+  ECS_TASK_DEFINITION: ./peex-sample-dev-task-definition.json # set this to the path to your Amazon ECS task definition
+                                                              # file, e.g. .aws/task-definition.json
+  CONTAINER_NAME: peex-sample-dev           # set this to the name of the container in the
+                                               # containerDefinitions section of your task definition
 
 jobs:
-  # Run code tests before building the image, to ensure it is good to go
-  build:
-    name: Run code tests
+  deploy:
+    name: Deploy
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [3.8] # Using a list so it's extensible for future use
+    environment: production
 
     steps:
-    - uses: actions/checkout@v2
-    - name: Setting up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v2
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Checkout
+        uses: actions/checkout@v3
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install flake8
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-
-    - name: Lint the code with flake8
-      run: |
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-
-    - name: Test with unittest
-      run: |
-        python -m unittest discover
-
-  # Build and push the Docker image
-  push_to_registry:
-    name: Build and push Docker image to Docker Hub
-    # ...but only when a `release` is `published`
-    if: github.event_name == 'release' # && github.event.action == 'published'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out the repo
-        uses: actions/checkout@v2
-        # if: ${{ github.ref == 'ref/head/master' }} # Info: https://docs.github.com/en/free-pro-team@latest/actions/reference/context-and-expression-syntax-for-github-actions#about-contexts-and-expressions
-
-      - name: Build and push image to the Docker Hub
-        uses: docker/build-push-action@v1 # Info: https://github.com/docker/build-push-action/tree/releases/v1#tags
-        # if: ${{ github.ref == 'ref/head/master' }}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@13d241b293754004c80624b5567555c4a39ffbe3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-          repository: ${{ secrets.DOCKERHUB_REPOSITORY }}
-          tag_with_ref: true # Info: https://github.com/docker/build-push-action/tree/releases/v1#tag_with_ref
-          tag_with_sha: true # Info: https://github.com/docker/build-push-action/tree/releases/v1#tag_with_sha
-          tags: latest
-          # push: ${{ startsWith(github.ref, 'refs/tags/') }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@aaf69d68aa3fb14c1d5a6be9ac61fe15b48453a2
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Build a docker container and
+          # push it to ECR so that it can
+          # be deployed to ECS.
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@97587c9d45a4930bf0e3da8dd2feb2a463cf4a3a
+        with:
+          task-definition: ${{ env.ECS_TASK_DEFINITION }}
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@de0132cf8cdedb79975c6d42b77eb7ea193cf28e
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true

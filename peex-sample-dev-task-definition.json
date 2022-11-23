@@ -1,0 +1,44 @@
+{
+    "taskDefinitionArn": "arn:aws:ecs:eu-west-1:216666971678:task-definition/peex-sample-dev:2",
+    "containerDefinitions": [
+        {
+            "name": "peex-sample-dev",
+            "image": "peex-sample-dev",
+            "cpu": 0,
+            "memory": 128,
+            "portMappings": [],
+            "essential": true,
+            "environment": [],
+            "mountPoints": [],
+            "volumesFrom": [],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-group": "peex-sample-dev-20221123092720802200000002",
+                    "awslogs-region": "eu-west-1",
+                    "awslogs-stream-prefix": "ec2"
+                }
+            }
+        }
+    ],
+    "family": "peex-sample-dev",
+    "revision": 2,
+    "volumes": [],
+    "status": "ACTIVE",
+    "requiresAttributes": [
+        {
+            "name": "com.amazonaws.ecs.capability.logging-driver.awslogs"
+        },
+        {
+            "name": "com.amazonaws.ecs.capability.docker-remote-api.1.19"
+        }
+    ],
+    "placementConstraints": [],
+    "compatibilities": [
+        "EXTERNAL",
+        "EC2"
+    ],
+    "registeredAt": "2022-11-23T09:27:41.507Z",
+    "registeredBy": "arn:aws:iam::216666971678:user/tfauto",
+    "tags": []
+}
