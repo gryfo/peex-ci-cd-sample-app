@@ -13,7 +13,11 @@ name: "CodeQL"
 
 on:
   push:
+<<<<<<< HEAD
     branches: [ '*' ]
+=======
+    branches: [ * ]
+>>>>>>> c469927 (Run codeql on push to all branches)
   pull_request:
     # The branches below must be a subset of the branches above
     branches: [ master, dev ]
